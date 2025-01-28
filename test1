@@ -1,0 +1,67 @@
+from machine import Pin, ADC
+import uasyncio as asyncio
+from differential_drive import DifferentialDrive
+from stepper_motor import StepperMotorClass
+
+# Initialize the LDR sensor
+ldr = ADC(Pin('GP26'))
+
+# Motor pins configuration
+left_pins = [0, 1, 2, 3]
+right_pins = [4, 5, 6, 7]
+left_motor = StepperMotorClass(left_pins)
+right_motor = StepperMotorClass(right_pins)
+
+# Initialize the DifferentialDrive class
+robot = DifferentialDrive(left_motor, right_motor, wheel_diameter=8, wheel_base=24.5, steps_per_RPM=50)
+
+# Variables for data logging
+file_name = 'ldr_data_shielded_LEDoff_lightoff.csv'
+ldr_values = []
+step_count = 0
+
+# Function to write the CSV header
+def write_csv_header():
+    with open(file_name, 'w') as file:
+        file.write('Step,LDR Value\n')
+
+# Function to append data to the CSV file
+def append_csv_data(values):
+    with open(file_name, 'a') as file:
+        for step, ldr_value in values:
+            file.write(f'{step},{ldr_value}\n')
+
+# Function to read the LDR value and save it to a list
+async def read_ldr():
+    global step_count
+    while True:
+        ldr_value = ldr.read_u16()  # Read LDR value (16-bit)
+        ldr_values.append((step_count, ldr_value))  # Log data to list
+        print(f"Step: {step_count}, LDR Value: {ldr_value}")
+        step_count += 1
+        await asyncio.sleep(0.01)  # Adjust the sleep time as needed
+
+# Function to save data to CSV when the robot stops
+def save_data_to_csv():
+    global ldr_values
+    append_csv_data(ldr_values)
+    ldr_values.clear()
+    print(f"Data saved to {file_name}")
+
+# Main function to run the robot's movement logic
+async def main():
+    write_csv_header()
+    await robot.turn_right(160, 0.002)
+    await asyncio.sleep(1)
+    save_data_to_csv()  # Save data when the robot stops
+    #await robot.turn_left(160, 0.002)
+    #await asyncio.sleep(1)
+    #save_data_to_csv()  # Save data when the robot stops
+
+# Run the asyncio loop
+try:
+    loop = asyncio.get_event_loop()
+    loop.create_task(read_ldr())  # Start the LDR reading task
+    loop.run_until_complete(main())
+except KeyboardInterrupt:
+    print("Program interrupted by user")
